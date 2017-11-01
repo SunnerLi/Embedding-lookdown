@@ -125,17 +125,42 @@ class EmbeddingReverseLayer(tl.layers.Layer):
         with tf.variable_scope(embedding_name, reuse=True) as vs:
             tl.layers.set_name_reuse(True)
             origin_embeddings = tf.get_variable(name='embeddings', **E_init_args)
-            vocabulary_size = origin_embeddings.get_shape()[0]
-            embedding_size = origin_embeddings.get_shape()[1]
+            vocabulary_size = int(origin_embeddings.get_shape()[0])
+            embedding_size = int(origin_embeddings.get_shape()[1])
         print("  [TL] EmbeddingReverselayer %s: (%d, %d)" % (self.name, vocabulary_size, embedding_size))
+
+        """
+            self.inputs = [None, 5, 128]
+            embed       = [2000, 128]
+            [None, 5, 2000, 128] - [None, 5, 1, 128]
+        """
 
         # Create range to lookup
         with tf.variable_scope(name) as vs:
             dummy_index = tf.range(0, limit=vocabulary_size)
             embed = tf.nn.embedding_lookup(origin_embeddings, dummy_index)
-            embed_distance = tf.reduce_sum(tf.square(embed - self.inputs), axis=-1)
+
+            print('1 size: ', self.inputs.get_shape()[1])
+
+            embed_reshape = tf.reshape(embed, [-1])
+            embed_tile = tf.tile(embed_reshape, [tf.shape(self.inputs)[0] * tf.shape(self.inputs)[1]])
+            embed_tile_reshape = tf.reshape(embed_tile, [tf.shape(self.inputs)[0], int(self.inputs.get_shape()[1]), vocabulary_size, embedding_size])
+            input_embed = tf.expand_dims(self.inputs, axis=2)
+
+            print(embed_tile.get_shape())
+            print(input_embed.get_shape())
+
+            embed_diff = embed_tile_reshape - input_embed
+            embed_distance = tf.reduce_sum(tf.square(embed_diff), axis=-1)
             embed_prob = tf.nn.softmax(-embed_distance + tf.reduce_min(embed_distance), dim=-1)
             embed_index = tf.arg_max(embed_prob, -1)
+
+            """
+            embed_tile = tf.reshape(tf.tile(tf.reshape(embed, [-1]), [int(self.inputs.get_shape()[1])]), [-1, vocabulary_size, embedding_size])
+            embed_distance = tf.reduce_sum(tf.square(embed_tile - self.inputs), axis=-1)
+            embed_prob = tf.nn.softmax(-embed_distance + tf.reduce_min(embed_distance), dim=-1)
+            embed_index = tf.arg_max(embed_prob, -1)
+            """
 
         self.outputs = embed_index
 
